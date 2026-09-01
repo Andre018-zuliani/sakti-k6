@@ -1,7 +1,7 @@
 # Performance Testing Report - API QuickPizza Grafana
 **Modul SWQA - SAKTI (Tugas 11)**
-**Tool Execution:** k6 v0.45+
-**Target Endpoint:** `https://quickpizza.grafana.com/api/pizza`
+**Tool Execution:** k6 v2.2.0
+**Target Endpoint:** `https://quickpizza.grafana.com/api/pizza` (POST)
 
 ---
 
@@ -9,63 +9,56 @@
 
 | Parameter Metric | Requirement Threshold | Load Test (100 VU) | Stress Test (500 VU) | Spike Test (500 VU Instant) | Status Requirements |
 |---|---|---|---|---|---|
-| **p(95) Response Time** | `< 500 ms` | **185 ms** | **1,420 ms** | **2,150 ms** | ❌ Gagal di Stress & Spike |
-| **Error Rate (Failed Reqs)** | `< 1.00%` | **0.00%** | **4.85%** | **12.30%** | ❌ Gagal di Stress & Spike |
-| **Check Success Rate** | `> 99.00%` | **100.00%** | **95.15%** | **87.70%** | ❌ Gagal di Stress & Spike |
-| **Max Response Time** | - | **410 ms** | **3,850 ms** | **5,210 ms** | Informasional |
-| **Total Throughput (RPS)** | - | ~95 RPS | ~210 RPS | ~180 RPS (Degraded) | Informasional |
+| **p(95) Response Time** | `< 500 ms` | **432.23 ms** | **444.80 ms** | **435.37 ms** | ✅ Lulus di semua skenario |
+| **Error Rate (Failed Reqs)** | `< 1.00%` | **0.00%** | **0.00%** | **0.00%** | ✅ Lulus di semua skenario |
+| **Check Success Rate** | `> 99.00%` | **100.00%** | **100.00%** | **100.00%** | ✅ Lulus di semua skenario |
+| **Avg Response Time** | - | 372.47 ms | 379.34 ms | 374.81 ms | Informasional |
+| **Max Response Time** | - | 2.02 s | 2.80 s | 1.68 s | Informasional |
+| **p(90) Response Time** | - | 411.92 ms | 423.10 ms | 418.02 ms | Informasional |
+| **Total Requests** | - | 11,514 | 147,723 | 26,240 | Informasional |
+| **Throughput (RPS)** | - | ~31.94 RPS | ~204.86 RPS | ~124.70 RPS | Informasional |
+| **Test Duration** | - | 6m00s | 12m01s | 3m30s | Informasional |
+| **Max Virtual Users** | - | 100 | 500 | 500 | Informasional |
 
 ---
 
 ## 🔍 Jawaban & Analisis Pertanyaan Performance Test
 
 ### 1. Bagaimana perubahan response time ketika load meningkat?
-Perubahan *response time* menunjukkan pola eksponensial searah dengan peningkatan jumlah Virtual Users (VUs):
-* **Pada beban rendah–sedang (10–50 VUs):** *Response time* sangat stabil berada di kisaran `40 ms` hingga `120 ms`. Server mampu menangani request antrean dengan *latency* minimal.
-* **Pada beban sedang–tinggi (50–100 VUs):** *Response time* naik secara gradual ke kisaran `150 ms - 280 ms`, tetapi masih jauh di bawah ambang batas (threshold) `500 ms`.
-* **Pada beban ekstrem (> 200 VUs):** Waktu tanggap mengalami peningkatan tajam (persisting queue delay). Rata-rata *response time* melambung tinggi hingga melebihi `1,000 ms` karena keterbatasan worker thread dan *connection pool* pada sisi server.
+Menariknya, *response time* API **sangat stabil** di seluruh rentang beban yang diuji (10 hingga 500 VUs). Rata-rata *response time* konsisten di kisaran `372 ms - 379 ms`, dan nilai p(95) juga hanya bergerak tipis antara `432 ms - 445 ms` meskipun jumlah VU melonjak 5x lipat (dari 100 ke 500 VU). Ini mengindikasikan bahwa *response time* pada API ini didominasi oleh *latency* jaringan/proses dasar (baseline ~275-290 ms untuk request tercepat) dan bukan oleh antrean akibat saturasi resource server, setidaknya dalam rentang beban yang diuji.
 
 ### 2. Pada kondisi testing, di mana response time paling tinggi?
-*Response time* tertinggi dicapai pada **Spike Testing** saat terjadi lonjakan mendadak dari **10 VUs ke 500 VUs dalam durasi 10 detik**, serta pada fase **Hold 500 VUs pada Stress Testing**.
-* Nilai p(95) tertinggi tercatat sebesar **2,150 ms** pada Spike Test.
-* Peak Max Response Time mencapai **5,210 ms** (terjadi *request timeout* 5xx) akibat *resource exhaustion* (CPU & Memory Saturation) secara mendadak saat antrean koneksi menumpuk (*connection backlog*).
+*Response time* tertinggi (secara max) justru tercatat pada **Stress Testing** sebesar **2.80 detik**, sedikit lebih tinggi dibanding Load Test (2.02 detik) dan Spike Test (1.68 detik). Ini masuk akal karena Stress Test berjalan paling lama (12 menit) dan mempertahankan 500 VU secara terus-menerus, sehingga probabilitas munculnya outlier *response time* akibat jitter jaringan lebih tinggi dibanding Spike Test yang hanya menahan 500 VU sesaat. Namun secara p(95), ketiga skenario tetap berada dalam rentang yang berdekatan (432-445 ms), jauh di bawah threshold 500 ms.
 
 ### 3. Apakah error mulai muncul ketika load semakin besar?
-**Ya.** Error tidak muncul pada kondisi normal (Load Test), namun mulai bermunculan seiring meningkatnya beban di luar kapasitas normal:
-* **Load Test (max 100 VU):** Error Rate **0.00%** (Semua HTTP Status 200 OK).
-* **Stress Test (max 500 VU):** Error Rate naik menjadi **4.85%**. Error berupa HTTP 503 (Service Unavailable), HTTP 504 (Gateway Timeout), dan TCP Connection Reset.
-* **Spike Test (500 VU Spike):** Error Rate melonjak hingga **12.30%** karena sistem mengalami kejutan beban (*traffic shock*) tanpa penghentian beban bertahap.
+**Tidak.** Error Rate tercatat **0.00%** secara konsisten di ketiga skenario — Load Test (100 VU), Stress Test (500 VU), maupun Spike Test (lonjakan instan ke 500 VU). Seluruh 185.477 total request gabungan (11.514 + 147.723 + 26.240) berhasil dengan HTTP 200 dan lolos check fungsional tanpa satupun kegagalan.
 
 ### 4. Pada level VU berapa mulai terlihat performance degradation?
-*Performance degradation* (degradasi performa) mulai terlihat secara signifikan pada kisaran **180 VU hingga 220 VU**:
-* Di bawah 180 VU, kenaikan response time berlangsung linear dan p(95) tetap di bawah 400 ms.
-* Memasuki **200+ VU**, p(95) mulai melampaui batas toleransi `500 ms` (mencapai ~650 ms), dan throughput (Requests Per Second / RPS) mulai mengalami plateau (konstan/menurun meskipun VU terus ditambah). Hal ini menandakan sistem telah melepaskan kondisi *sweet spot* pemrosesan pararelnya.
+Berdasarkan hasil pengujian, **tidak ditemukan titik degradasi performa yang signifikan** hingga 500 VU (batas maksimum yang diuji). p(95) response time tetap stabil di rentang 432-445 ms baik pada beban rendah (10 VU) maupun beban puncak (500 VU), dan tidak ada tren kenaikan latency yang tajam maupun error rate yang meningkat seiring naiknya VU. Ini menunjukkan API QuickPizza mampu menangani beban hingga 500 concurrent VUs tanpa menunjukkan tanda-tanda saturasi dalam kondisi pengujian ini.
 
 ### 5. Bagaimana perbedaan perilaku sistem antara Load, Stress, dan Spike Testing?
-* **Load Testing (Ramping 10-100 VUs):** Perilaku sistem **sangat stabil dan predictable**. Resource CPU/RAM server terkendali, tidak ada request yang gagal, dan waktu tanggap berada jauh di bawah *threshold* 500ms.
-* **Stress Testing (Gradual up to 500 VUs):** Perilaku sistem mengalami **degradasi bertahap (*graceful degradation*)**. Saat beban melewati titik jenuh (~200 VU), latency meningkat drastis dan muncul error berantai (5xx), namun sistem tidak langsung crash total karena peningkatan VU dilakukan secara gradual.
-* **Spike Testing (Instant 10 -> 500 VUs):** Perilaku sistem mengalami **kejutan ekstrem (*traffic shock*)**. Sistem mengalami *resource bottleneck* secara serentak, menyebabkan penumpukan request antrean yang cepat, latensi membumbung tinggi (>2 detik), serta error rate tinggi akibat alokasi memori/thread tidak mampu berkembang (*scale-up*) secepat lonjakan trafik.
+* **Load Testing (Ramping 10-100 VUs):** Sistem menunjukkan performa **stabil dan predictable**, error rate 0%, p(95) 432.23 ms, throughput ~32 RPS.
+* **Stress Testing (Gradual up to 500 VUs):** Sistem tetap **stabil meski beban 5x lebih besar**, tanpa graceful degradation yang terlihat — p(95) hanya naik tipis ke 444.8 ms, error rate tetap 0%, throughput naik signifikan ke ~205 RPS mengikuti kenaikan VU.
+* **Spike Testing (Instant 10 -> 500 VUs):** Sistem **tidak menunjukkan traffic shock** meskipun lonjakan VU terjadi sangat cepat (10 detik). p(95) tetap terkendali di 435.37 ms dan error rate 0%, mengindikasikan tidak ada bottleneck resource yang terpicu oleh kenaikan beban mendadak dalam skenario ini.
 
 ### 6. Setelah load diturunkan, apakah sistem dapat kembali stabil?
-**Ya, sistem dapat pulih (*auto-recovery*)**, tetapi membutuhkan *cool-down period* singkat:
-* Ketika jumlah VU di-ramp down kembali ke 10 VU atau 0 VU, response time kembali normal ke kisaran `< 100 ms` dan Error Rate kembali menjadi `0%`.
-* Hal ini mengindikasikan bahwa server API tidak mengalami *permanent crash* atau *memory leak* yang fatal, melainkan hanya mengalami *temporary bottleneck* akibat ketiadaan mekanisme *auto-scaling* atau *rate limiting* saat beban tinggi.
+Karena sistem **tidak pernah mengalami degradasi performa yang signifikan** di ketiga skenario, pertanyaan pemulihan (*recovery*) menjadi kurang relevan untuk pengujian kali ini — tidak ada kondisi "rusak" yang perlu dipulihkan. Response time dan error rate tetap stabil sepanjang siklus ramp-up maupun ramp-down VU.
 
 ### 7. Berdasarkan hasil ketiga tes, apakah API masih memenuhi performance requirement?
-**Kesimpulan Akhir: API BELUM Memenuhi Performance Requirement secara keseluruhan.**
+**Kesimpulan Akhir: API LULUS Performance Requirement di ketiga skenario pengujian.**
 
 **Rincian Evaluasi:**
-1. ✅ **LULUS pada Load Testing (Kondisi Operasional Normal):** API bekerja sangat baik hingga 100 VUs dengan p(95) < 200ms dan Error Rate 0%.
-2. ❌ **GAGAL pada Stress & Spike Testing (Kondisi High Traffic / Event Peak):** API gagal memenuhi *threshold* yang dipersyaratkan:
-   * **Target Latency p95:** `< 500ms` (Realisasi Stress: 1,420ms | Spike: 2,150ms) ➔ **NON-COMPLIANT**
-   * **Target Error Rate:** `< 1.00%` (Realisasi Stress: 4.85% | Spike: 12.30%) ➔ **NON-COMPLIANT**
-   * **Target Check Success:** `> 99.00%` (Realisasi Stress: 95.15% | Spike: 87.70%) ➔ **NON-COMPLIANT**
+1. ✅ **LULUS pada Load Testing (100 VU):** p(95) 432.23 ms (< 500 ms), Error Rate 0.00% (< 1%), Check Success 100.00% (> 99%).
+2. ✅ **LULUS pada Stress Testing (500 VU):** p(95) 444.80 ms (< 500 ms), Error Rate 0.00% (< 1%), Check Success 100.00% (> 99%).
+3. ✅ **LULUS pada Spike Testing (500 VU Instant):** p(95) 435.37 ms (< 500 ms), Error Rate 0.00% (< 1%), Check Success 100.00% (> 99%).
+
+Seluruh threshold yang dipersyaratkan terpenuhi di ketiga jenis pengujian, tanpa satupun kegagalan request selama total ±21,5 menit durasi pengujian gabungan.
 
 ---
 
-## 💡 Rekomendasi Perbaikan (Actionable Engineering Recommendations)
+## 💡 Catatan & Rekomendasi Lanjutan
 
-1. **Implementasi Rate Limiting & Throttling:** Menerapkan pembatasan jumlah request per IP/Token untuk mencegah *Spike attack* merusak ketersediaan layanan (*Denial of Service* tidak sengaja).
-2. **Horizontal Pod Autoscaling (HPA):** Mengkonfigurasi auto-scaling instance server berbasis CPU/Memory utilization agar pod dapat bertambah otomatis saat VU melampaui 150 VU.
-3. **Database Connection Pooling & Caching Layer:** Menerapkan Redis Caching pada layer GET API `/api/pizza` untuk mengurangi beban query database langsung saat traffic melonjak tinggi.
-# sakti-k6
+1. **Uji beban lebih tinggi untuk menemukan breaking point:** Karena API tetap stabil hingga 500 VU, disarankan menaikkan target VU (misal 1.000-2.000) pada iterasi pengujian berikutnya untuk menemukan titik jenuh (*saturation point*) yang sesungguhnya, mengingat endpoint ini adalah demo publik milik Grafana yang kemungkinan sudah di-hosting dengan infrastruktur auto-scaling/CDN.
+2. **Tambahkan skenario think-time yang lebih realistis:** `sleep(1)` statis pada tiap iterasi bisa divariasikan (misal `sleep(Math.random() * 3)`) agar pola trafik lebih menyerupai perilaku user asli dan tidak terlalu seragam antar VU.
+3. **Pantau metrik sisi server (bukan hanya sisi client):** Hasil k6 hanya mencerminkan observasi dari sisi client. Jika endpoint ini adalah milik sendiri (bukan demo publik), sebaiknya dikombinasikan dengan metrik APM/observability (CPU, memory, DB connection pool) di sisi server untuk memastikan tidak ada resource yang mendekati batas meski response time terlihat stabil.
+4. **Uji ulang di jam/hari berbeda:** Karena target endpoint adalah layanan publik pihak ketiga, hasil dapat bervariasi tergantung beban trafik global pada saat pengujian dilakukan. Disarankan menjalankan pengujian berulang di waktu berbeda untuk validasi konsistensi hasil.
